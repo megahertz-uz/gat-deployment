@@ -1,0 +1,67 @@
+name: deploy
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "main"
+
+env:
+  SERVER_HOST: 10.140.0.203
+  SERVER_SSH_PORT: 22
+
+run-name: "${{ github.actor }} deploying"
+
+jobs:
+  deploy:
+    runs-on: 
+      - uz-1a-dind-runner
+    concurrency: 
+      group: ${{ github.repository }}
+    container:
+      image: docker:cli
+      volumes:
+        - /var/run/docker.sock:/var/run/docker.sock
+    steps:
+      
+      - name: Import Secrets
+        id: import-secrets
+        uses: hashicorp/vault-action@v2
+        with:
+          url: https://vault.megahertz.uz
+          token: ${{ secrets.VAULT_TOKEN }}
+          secrets: |
+              megahertz/data/ssh private_key | SSH_PRIVATE_KEY ;
+              megahertz/data/registry url | REGISTRY_URL;
+              megahertz/data/registry username | REGISTRY_USERNAME;
+              megahertz/data/registry password | REGISTRY_PASSWORD;
+              megahertz/data/github admin_pat | GITHUB_ADMIN_PAT;
+              gat/data/prd POSTGRES_PASSWORD | POSTGRES_PASSWORD;
+              gat/data/prd SECRET_KEY | SECRET_KEY;
+              gat/data/prd REDIS_PASSWORD | REDIS_PASSWORD;
+              gat/data/prd MINIO_ACCESS_KEY | MINIO_ACCESS_KEY;
+              gat/data/prd MINIO_SECRET_KEY | MINIO_SECRET_KEY;
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Replace vars
+        uses: megahertz-uz/shifter@v1-alpha
+        with:
+          patterns: |
+            {{SECRET_KEY}}=${{ steps.import-secrets.outputs.SECRET_KEY }}
+            {{POSTGRES_PASSWORD}}=${{ steps.import-secrets.outputs.POSTGRES_PASSWORD }}
+            {{REDIS_PASSWORD}}=${{ steps.import-secrets.outputs.REDIS_PASSWORD }}
+            {{MINIO_ACCESS_KEY}}=${{ steps.import-secrets.outputs.MINIO_ACCESS_KEY }}
+            {{MINIO_SECRET_KEY}}=${{ steps.import-secrets.outputs.MINIO_SECRET_KEY }}
+          locations: |
+            gat/.env
+            
+      - name: Deploy
+        uses: ./.github/actions/compose-deploy
+        with:
+          ssh_private_key: ${{ steps.import-secrets.outputs.SSH_PRIVATE_KEY }}
+          server_host: ${{ env.SERVER_HOST }}
+          ssh_port: ${{ env.SERVER_SSH_PORT }}
+          registry_url: ${{ steps.import-secrets.outputs.REGISTRY_URL }}
+          registry_username: ${{ steps.import-secrets.outputs.REGISTRY_USERNAME }}
+          registry_password: ${{ steps.import-secrets.outputs.REGISTRY_PASSWORD }}
