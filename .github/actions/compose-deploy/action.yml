@@ -44,4 +44,4 @@ runs:
         # deploy
         ssh -o StrictHostKeyChecking=no -p ${{ inputs.ssh_port }} ${{ inputs.username }}@${{ inputs.server_host }} "cd ~/deployment/gat &&
         echo ${{ inputs.registry_password }} | docker login ${{ inputs.registry_url }} --username ${{ inputs.registry_username }} --password-stdin
-        docker compose -f infrastructure.docker-compose.yml -f frontend.docker-compose.yml -f backend.docker-compose.yml up -d --pull always"
+        docker compose -f backend.docker-compose.yml up -d --pull always"
